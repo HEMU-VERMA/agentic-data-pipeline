@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agentic Pipeline Control Center</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Inter:wght@300;400;500;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .mono { font-family: 'JetBrains Mono', monospace; }
+        .custom-scroll::-webkit-scrollbar { width: 4px; }
+        .custom-scroll::-webkit-scrollbar-track { background: transparent; }
+        .custom-scroll::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
+    </style>
+</head>
+<body class="bg-[#020617] text-slate-200 selection:bg-indigo-500/30">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useCallback } = React;
+
+        const App = () => {
+            const [activeTab, setActiveTab] = useState('analyst');
+            const [isOnline, setIsOnline] = useState(false);
+            const [latency, setLatency] = useState(0);
+            const [logs, setLogs] = useState([{ time: new Date().toLocaleTimeString(), msg: "Dashboard initialized." }]);
+            
+            // Analyst State
+            const [query, setQuery] = useState('');
+            const [city, setCity] = useState('Delhi');
+            const [report, setReport] = useState('');
+            
+            // Healing State (Now Editable!)
+            const [targetSchema, setTargetSchema] = useState('{"revenue": "float", "client": "string"}');
+            const [sourceData, setSourceData] = useState('[{"total_income": 9500.25, "customer_name": "Global Corp"}]');
+            const [repairCode, setRepairCode] = useState('');
+            
+            const [loading, setLoading] = useState(false);
+            const API_BASE = "http://127.0.0.1:8000";
+
+            // Add to session log
+            const addLog = (msg) => {
+                setLogs(prev => [{ time: new Date().toLocaleTimeString(), msg }, ...prev].slice(0, 10));
+            };
+
+            // Real-time Health Check
+            const checkHealth = useCallback(async () => {
+                const start = Date.now();
+                try {
+                    const res = await fetch(`${API_BASE}/`);
+                    if (res.ok) {
+                        setIsOnline(true);
+                        setLatency(Date.now() - start);
+                    } else {
+                        setIsOnline(false);
+                    }
+                } catch (err) {
+                    setIsOnline(false);
+                }
+            }, []);
+
+            useEffect(() => {
+                checkHealth();
+                const interval = setInterval(checkHealth, 10000);
+                return () => clearInterval(interval);
+            }, [checkHealth]);
+
+            useEffect(() => {
+                lucide.createIcons();
+            }, [activeTab, isOnline, report, repairCode]);
+
+            const handleAnalystQuery = async () => {
+                if (!query) return;
+                setLoading(true);
+                addLog(`Executing Analyst query for ${city}...`);
+                try {
+                    const response = await fetch(`${API_BASE}/api/v1/query`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ query, city }),
+                    });
+                    const data = await response.json();
+                    setReport(data.agent_report);
+                    addLog("Analysis report received.");
+                } catch (err) {
+                    addLog("ERROR: Analyst query failed.");
+                    setReport("Failed to connect to backend. Ensure python api/main.py is running.");
+                }
+                setLoading(false);
+            };
+
+            const handleSelfHeal = async () => {
+                setLoading(true);
+                addLog("Requesting Autonomous Repair...");
+                try {
+                    const response = await fetch(`${API_BASE}/auto-heal`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            target_schema: JSON.parse(targetSchema),
+                            sample_data: JSON.parse(sourceData)
+                        }),
+                    });
+                    const data = await response.json();
+                    setRepairCode(data.repair_code);
+                    addLog("Self-healing logic generated.");
+                } catch (err) {
+                    addLog("ERROR: Healing agent unreachable.");
+                    setRepairCode("# Error: Please check JSON formatting in inputs.");
+                }
+                setLoading(false);
+            };
+
+            return (
+                <div className="min-h-screen flex flex-col">
+                    {/* Top Navigation Bar */}
+                    <nav className="border-b border-slate-800 bg-slate-900/50 backdrop-blur-md sticky top-0 z-50">
+                        <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                                <div className="bg-indigo-600 p-1.5 rounded-lg">
+                                    <i data-lucide="brain-circuit" className="text-white w-5 h-5"></i>
+                                </div>
+                                <span className="font-bold tracking-tight text-lg">Agentic<span className="text-indigo-400">Pipeline</span></span>
+                            </div>
+
+                            <div className="flex items-center gap-6">
+                                <div className="flex items-center gap-4 text-xs font-medium uppercase tracking-widest text-slate-500">
+                                    <div className="flex items-center gap-2">
+                                        <i data-lucide="cpu" className="w-4 h-4"></i>
+                                        <span>Llama 3.1</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <i data-lucide="database" className="w-4 h-4"></i>
+                                        <span>Supabase</span>
+                                    </div>
+                                </div>
+                                
+                                <div className={`flex items-center gap-2 px-3 py-1 rounded-full border ${isOnline ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-400' : 'border-red-500/20 bg-red-500/10 text-red-400'}`}>
+                                    <div className={`w-2 h-2 rounded-full ${isOnline ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`}></div>
+                                    <span className="text-[10px] font-bold uppercase">{isOnline ? `Online (${latency}ms)` : 'Offline'}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </nav>
+
+                    <div className="flex-1 max-w-7xl mx-auto w-full grid grid-cols-12 gap-6 p-6">
+                        {/* Sidebar: Activity Log */}
+                        <aside className="col-span-12 lg:col-span-3 space-y-6">
+                            <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-5">
+                                <h3 className="text-xs font-bold text-slate-500 uppercase mb-4 flex items-center gap-2">
+                                    <i data-lucide="activity" className="w-4 h-4"></i> Session Log
+                                </h3>
+                                <div className="space-y-4 custom-scroll overflow-y-auto max-h-[400px]">
+                                    {logs.map((log, i) => (
+                                        <div key={i} className="text-[11px] border-l border-slate-800 pl-3 py-1">
+                                            <div className="text-slate-500 mb-1">{log.time}</div>
+                                            <div className="text-slate-300 leading-tight">{log.msg}</div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div className="bg-gradient-to-br from-indigo-600 to-violet-700 rounded-2xl p-5 text-white shadow-xl shadow-indigo-500/10">
+                                <h4 className="font-bold text-sm mb-1">Portfolio Project</h4>
+                                <p className="text-xs text-indigo-100 leading-relaxed">Agentic ETL with Self-Healing capabilities powered by Groq LPU.</p>
+                            </div>
+                        </aside>
+
+                        {/* Main Content Area */}
+                        <main className="col-span-12 lg:col-span-9 space-y-6">
+                            {/* Tab Switcher */}
+                            <div className="flex gap-1 bg-slate-900 border border-slate-800 p-1 rounded-xl w-fit">
+                                <button onClick={() => setActiveTab('analyst')} className={`flex items-center gap-2 px-6 py-2 rounded-lg text-sm font-semibold transition-all ${activeTab === 'analyst' ? 'bg-slate-800 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'}`}>
+                                    <i data-lucide="bar-chart-3" className="w-4 h-4"></i> Analyst Agent
+                                </button>
+                                <button onClick={() => setActiveTab('healing')} className={`flex items-center gap-2 px-6 py-2 rounded-lg text-sm font-semibold transition-all ${activeTab === 'healing' ? 'bg-slate-800 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'}`}>
+                                    <i data-lucide="shield-check" className="w-4 h-4"></i> Healing Agent
+                                </button>
+                            </div>
+
+                            {activeTab === 'analyst' ? (
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 animate-in slide-in-from-bottom-2 duration-500">
+                                    <div className="md:col-span-1 space-y-4">
+                                        <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl">
+                                            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-2">Location Context</label>
+                                            <input type="text" value={city} onChange={e => setCity(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
+                                        </div>
+                                        <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl">
+                                            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-2">Natural Language Prompt</label>
+                                            <textarea rows="5" value={query} onChange={e => setQuery(e.target.value)} placeholder="Ask about sales trends, anomalies, or summaries..." className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none resize-none" />
+                                            <button onClick={handleAnalystQuery} disabled={loading || !isOnline} className="w-full mt-4 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-bold py-3 rounded-xl transition flex items-center justify-center gap-2">
+                                                {loading ? <i data-lucide="refresh-cw" className="w-4 h-4 animate-spin"></i> : <i data-lucide="sparkles" className="w-4 h-4"></i>}
+                                                Process Analysis
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div className="md:col-span-2 flex flex-col bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden min-h-[450px]">
+                                        <div className="px-5 py-3 border-b border-slate-800 bg-slate-800/30 flex justify-between items-center">
+                                            <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Agent Reasoning Output</span>
+                                            {loading && <span className="text-[10px] text-indigo-400 animate-pulse font-bold uppercase">Synthesizing Data...</span>}
+                                        </div>
+                                        <div className="p-6 flex-1 custom-scroll overflow-y-auto text-sm text-slate-300 leading-relaxed font-medium">
+                                            {report ? report : (
+                                                <div className="h-full flex flex-col items-center justify-center text-slate-600 opacity-50 space-y-4">
+                                                    <i data-lucide="message-square-dashed" className="w-12 h-12"></i>
+                                                    <p className="text-center italic">Waiting for query input. Ensure Supabase has data.</p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="grid grid-cols-1 gap-6 animate-in slide-in-from-bottom-2 duration-500">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                        <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl">
+                                            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-2">Target Schema (JSON)</label>
+                                            <textarea rows="4" value={targetSchema} onChange={e => setTargetSchema(e.target.value)} className="w-full bg-black/40 border border-slate-800 rounded-xl px-4 py-3 text-xs mono text-indigo-300 outline-none focus:ring-1 focus:ring-indigo-500" />
+                                        </div>
+                                        <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl">
+                                            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-2">Broken Source Sample (JSON)</label>
+                                            <textarea rows="4" value={sourceData} onChange={e => setSourceData(e.target.value)} className="w-full bg-black/40 border border-slate-800 rounded-xl px-4 py-3 text-xs mono text-amber-300 outline-none focus:ring-1 focus:ring-amber-500" />
+                                        </div>
+                                    </div>
+
+                                    <div className="bg-indigo-600/10 border border-indigo-500/20 rounded-2xl p-6 flex flex-col items-center justify-center text-center">
+                                        <h3 className="font-bold text-indigo-300 mb-2">Test Autonomous Mapping</h3>
+                                        <p className="text-xs text-slate-400 mb-6 max-w-lg">The Healing Agent will compare the Source to the Target and write a Python repair function on-the-fly to handle schema drift.</p>
+                                        <button onClick={handleSelfHeal} disabled={loading || !isOnline} className="bg-indigo-500 hover:bg-indigo-400 text-white px-8 py-3 rounded-xl font-bold transition-all shadow-lg shadow-indigo-500/20 flex items-center gap-2">
+                                            {loading ? <i data-lucide="refresh-cw" className="w-4 h-4 animate-spin"></i> : <i data-lucide="wand-2" className="w-4 h-4"></i>}
+                                            Generate Autonomous Fix
+                                        </button>
+                                    </div>
+
+                                    <div className="bg-black/60 border border-slate-800 rounded-2xl overflow-hidden">
+                                        <div className="px-5 py-3 border-b border-slate-800 bg-slate-900 flex justify-between items-center">
+                                            <span className="text-xs font-bold text-emerald-500 uppercase tracking-widest">Generated Repair Logic (Python)</span>
+                                            <i data-lucide="code" className="w-4 h-4 text-slate-600"></i>
+                                        </div>
+                                        <div className="p-6 overflow-x-auto min-h-[250px] mono text-xs leading-relaxed text-emerald-400/90">
+                                            {repairCode ? <pre>{repairCode}</pre> : <div className="h-full flex items-center justify-center italic text-slate-700">Code output will stream here...</div>}
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                        </main>
+                    </div>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
